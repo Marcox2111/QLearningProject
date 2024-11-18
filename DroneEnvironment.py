@@ -29,15 +29,33 @@ class DroneEnvironment:
             self._init_gui()
 
 
+        # Hardcoded grid
+        self.grid = np.array([
+            [1, 0, 0, 1, 1, 0, 1, 0, 1, 0],
+            [0, 0, 0, 1, 1, 1, 1, 0, 1, 0],
+            [1, 1, 0, 0, 0, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 0, 1, 0, 1, 0, 0],
+            [1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 1, 1, 1, 0, 1],
+            [0, 0, 0, 0, 0, 1, 0, 0, 1, 0],
+            [1, 0, 0, 1, 1, 1, 0, 1, 1, 1],
+            [0, 0, 0, 1, 1, 0, 1, 1, 0, 0],
+            [1, 1, 0, 0, 0, 0, 1, 1, 0, 1]
+        ])
+
         self.REWARDS = {
-            'step': -0.01,             # Small penalty to encourage efficiency
-            'boundary': -0.05,         # Moderate penalty for poor navigation
-            'new_cell': 0.1,           # Good reward for doing the main task
-            'return_towards': 0.05,    # Encourage safe return behavior
-            'return_away': -0.1,       # Stronger penalty for risky behavior
-            'completion': 4.0,         # Big reward for perfect mission
-            'safe_return': 0.3,        # Good reward for safe return
-            'battery_depleted': -2.0   # Catastrophic failure - should be strongly avoided
+            'step': -0.1,             # Small penalty to encourage efficiency
+            'new_cell': 2,            # Good reward for doing the main task
+
+            'boundary': -1,         # Moderate penalty for poor navigation
+            'revisit': -0.2,   # Slight penalty for revisiting cells
+
+            'return_towards': 0.02,    # Encourage safe return behavior
+            'return_away': -2,       # Stronger penalty for risky behavior
+
+            'completion': 20.0,         # Big reward for perfect mission
+            'safe_return': 5,        # Good reward for safe return
+            'battery_depleted': -20.0   # Catastrophic failure - should be strongly avoided
         }
         
         self.reset()
@@ -70,7 +88,7 @@ class DroneEnvironment:
         
     def reset(self):
         # Generate random grid
-        self.grid = np.random.choice([0, 1], size=(self.grid_size, self.grid_size), p=[0.5, 0.5])
+        # self.grid = np.random.choice([0, 1], size=(self.grid_size, self.grid_size), p=[0.5, 0.5])
         
         # Random starting position
         valid_positions = np.argwhere(self.grid == 1)
@@ -97,7 +115,6 @@ class DroneEnvironment:
         return (
             tuple(self.current_pos),
             self.max_steps - self.steps,
-            tuple(map(tuple, self.visited))
         )
 
     def _calculate_manhattan_distance(self, pos1, pos2):
@@ -130,10 +147,16 @@ class DroneEnvironment:
         
         # Update position and mark as visited
         self.current_pos = new_pos
-        if not self.visited[tuple(self.current_pos)]:
-            self.visited[tuple(self.current_pos)] = 1
-            if self.grid[tuple(self.current_pos)] == 1:
-                reward += self.REWARDS['new_cell']
+
+        # Check if cell was already visited
+        if self.visited[tuple(self.current_pos)]:
+            reward += self.REWARDS['revisit']
+        elif self.grid[tuple(self.current_pos)] == 1:
+            # New seedable cell
+            reward += self.REWARDS['new_cell']
+        
+        # Mark as visited
+        self.visited[tuple(self.current_pos)] = 1
 
         # Check if drone should return home
         should_return = self._should_return_home()

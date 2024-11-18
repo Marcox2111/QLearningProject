@@ -6,7 +6,7 @@ import pickle
 import json
 
 class QLearning:
-    def __init__(self, env, learning_rate=0.1, discount_factor=0.95, epsilon=1.0, epsilon_decay=0.995, min_epsilon=0.01):
+    def __init__(self, env, learning_rate=0.1, discount_factor=0.97, epsilon=1.0, epsilon_decay=0.995, min_epsilon=0.01):
         self.env = env
         self.lr = learning_rate
         self.gamma = discount_factor
@@ -126,11 +126,13 @@ class QLearning:
                 steps += 1
             
             self.epsilon_history.append(self.epsilon)
-            # Decay epsilon
-            self.epsilon = max(
-                self.min_epsilon,
-                self.epsilon - (self.epsilon - self.min_epsilon) / max_episodes
-            )
+            # # Decay epsilon
+            # self.epsilon = max(
+            #     self.min_epsilon,
+            #     self.epsilon - (self.epsilon - self.min_epsilon) / max_episodes
+            # )
+            self.epsilon = self.epsilon * self.epsilon_decay  # Using exponential decay
+
             
             # Track progress
             self.episode_rewards.append(total_reward)
@@ -341,7 +343,7 @@ def main():
     # Create environment and agent
     env = DroneEnvironment(
         grid_size=10,
-        max_steps=50,
+        max_steps=100,
         # render_mode="human",
         safe_return_threshold=0.3
     )
@@ -350,7 +352,7 @@ def main():
         env=env,
         learning_rate=0.1,
         epsilon=1.0,
-        epsilon_decay=0.9995,  # Slower decay
+        epsilon_decay=0.99995,  # Slower decay
         min_epsilon=0.05      # Higher minimum
     )
 
