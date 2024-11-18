@@ -1,0 +1,212 @@
+import numpy as np
+import gymnasium as gym
+from gymnasium import spaces
+import pygame
+import time
+
+class DroneEnvironment(gym.Env):
+    def __init__(self, grid_size=10, max_steps=100, render_mode=None):
+        super(DroneEnvironment, self).__init__()
+        
+        self.grid_size = grid_size
+        self.max_steps = max_steps
+        self.render_mode = render_mode
+        self.window = None
+        self.clock = None
+        
+        # Pygame visualization settings
+        self.cell_size = 60
+        self.window_size = self.grid_size * self.cell_size
+        
+        # Action space: 0: up, 1: right, 2: down, 3: left
+        self.action_space = spaces.Discrete(4)
+        
+        # Observation space: current position (2), battery left (1), 
+        # grid state (grid_size x grid_size), visited cells (grid_size x grid_size)
+        self.observation_space = spaces.Dict({
+            'position': spaces.Box(low=0, high=grid_size-1, shape=(2,), dtype=np.int32),
+            'battery': spaces.Box(low=0, high=max_steps, shape=(1,), dtype=np.int32),
+            'grid': spaces.Box(low=0, high=1, shape=(grid_size, grid_size), dtype=np.int32),
+            'visited': spaces.Box(low=0, high=1, shape=(grid_size, grid_size), dtype=np.int32)
+        })
+        
+        self.reset()
+
+    def _init_pygame(self):
+        if self.window is None and self.render_mode == "human":
+            pygame.init()
+            pygame.display.init()
+            self.window = pygame.display.set_mode((self.window_size, self.window_size))
+            pygame.display.set_caption("Drone Seeding Environment")
+        if self.clock is None and self.render_mode == "human":
+            self.clock = pygame.time.Clock()
+    
+    def reset(self, seed=None):
+        super().reset(seed=seed)
+        
+        # Generate random grid (1: needs seeding, 0: forbidden)
+        self.grid = np.random.choice([0, 1], size=(self.grid_size, self.grid_size), p=[0.3, 0.7])
+        
+        # Random starting position
+        valid_positions = np.argwhere(self.grid == 1)
+        start_idx = self.np_random.integers(len(valid_positions))
+        self.start_pos = valid_positions[start_idx]
+        self.current_pos = self.start_pos.copy()
+        
+        # Initialize visited cells
+        self.visited = np.zeros((self.grid_size, self.grid_size))
+        self.visited[tuple(self.current_pos)] = 1
+        
+        # Reset steps
+        self.steps = 0
+        
+        # Initialize pygame if needed
+        self._init_pygame()
+        
+        observation = {
+            'position': self.current_pos,
+            'battery': np.array([self.max_steps - self.steps]),
+            'grid': self.grid,
+            'visited': self.visited
+        }
+        
+        if self.render_mode == "human":
+            self._render_frame()
+        
+        return observation, {}
+    
+    def step(self, action):
+        self.steps += 1
+        
+        # Movement directions
+        directions = [(-1, 0), (0, 1), (1, 0), (0, -1)]  # up, right, down, left
+        
+        # Calculate new position
+        new_pos = self.current_pos + directions[action]
+        
+        # Check if movement is valid
+        terminated = False
+        reward = -1  # Base reward for each step
+        
+        # Check boundaries
+        if (new_pos[0] < 0 or new_pos[0] >= self.grid_size or 
+            new_pos[1] < 0 or new_pos[1] >= self.grid_size):
+            new_pos = self.current_pos  # Stay in current position
+            reward -= 5  # Penalty for hitting boundary
+        
+        # Check if new position is forbidden
+        elif self.grid[tuple(new_pos)] == 0:
+            new_pos = self.current_pos  # Stay in current position
+            reward -= 5  # Penalty for trying to move to forbidden cell
+        
+        # Update position and mark as visited
+        self.current_pos = new_pos
+        if not self.visited[tuple(self.current_pos)]:
+            self.visited[tuple(self.current_pos)] = 1
+            if self.grid[tuple(self.current_pos)] == 1:
+                reward += 10  # Reward for visiting new cell that needs seeding
+        
+        # Check if back at start with all cells visited
+        seedable_cells = self.grid == 1
+        if (np.array_equal(self.current_pos, self.start_pos) and 
+            np.all(self.visited[seedable_cells] == 1)):
+            reward += 100  # Big reward for completing task
+            terminated = True
+        
+        # Check if out of battery
+        if self.steps >= self.max_steps:
+            reward -= 50  # Big penalty for running out of battery
+            terminated = True
+        
+        observation = {
+            'position': self.current_pos,
+            'battery': np.array([self.max_steps - self.steps]),
+            'grid': self.grid,
+            'visited': self.visited
+        }
+        
+        if self.render_mode == "human":
+            self._render_frame()
+        
+        return observation, reward, terminated, False, {}
+
+    def _render_frame(self):
+        if self.window is None:
+            return
+        
+        self.window.fill((255, 255, 255))
+        
+        # Draw grid
+        for i in range(self.grid_size):
+            for j in range(self.grid_size):
+                rect = pygame.Rect(
+                    j * self.cell_size,
+                    i * self.cell_size,
+                    self.cell_size,
+                    self.cell_size
+                )
+                
+                # Draw cell background
+                if self.grid[i, j] == 0:  # Forbidden cell
+                    color = (100, 100, 100)  # Gray
+                else:  # Seedable cell
+                    color = (200, 255, 200)  # Light green
+                pygame.draw.rect(self.window, color, rect)
+                
+                # Draw visited cells
+                if self.visited[i, j] == 1 and self.grid[i, j] == 1:
+                    # Draw seeds as small circles
+                    center = (
+                        j * self.cell_size + self.cell_size // 2,
+                        i * self.cell_size + self.cell_size // 2
+                    )
+                    pygame.draw.circle(self.window, (0, 150, 0), center, self.cell_size // 4)
+                
+                # Draw grid lines
+                pygame.draw.rect(self.window, (0, 0, 0), rect, 1)
+        
+        # Draw start position
+        start_center = (
+            self.start_pos[1] * self.cell_size + self.cell_size // 2,
+            self.start_pos[0] * self.cell_size + self.cell_size // 2
+        )
+        pygame.draw.circle(self.window, (255, 0, 0), start_center, self.cell_size // 6)
+        
+        # Draw current drone position
+        drone_center = (
+            self.current_pos[1] * self.cell_size + self.cell_size // 2,
+            self.current_pos[0] * self.cell_size + self.cell_size // 2
+        )
+        pygame.draw.circle(self.window, (0, 0, 255), drone_center, self.cell_size // 3)
+        
+        # Draw battery indicator
+        battery_height = 20
+        battery_width = self.window_size - 20
+        battery_rect = pygame.Rect(10, self.window_size - 30, battery_width, battery_height)
+        pygame.draw.rect(self.window, (200, 200, 200), battery_rect)
+        remaining_battery = (self.max_steps - self.steps) / self.max_steps
+        if remaining_battery > 0:
+            battery_level_rect = pygame.Rect(
+                10, 
+                self.window_size - 30,
+                battery_width * remaining_battery,
+                battery_height
+            )
+            battery_color = (
+                int(255 * (1 - remaining_battery)),
+                int(255 * remaining_battery),
+                0
+            )
+            pygame.draw.rect(self.window, battery_color, battery_level_rect)
+        
+        pygame.display.flip()
+        
+        if self.render_mode == "human":
+            self.clock.tick(10)  # 10 FPS
+
+    def close(self):
+        if self.window is not None:
+            pygame.display.quit()
+            pygame.quit()
+            self.window = None
+            self.clock = None
