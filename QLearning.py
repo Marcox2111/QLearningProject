@@ -6,14 +6,25 @@ import pickle
 import json
 
 class QLearning:
-    def __init__(self, env, learning_rate=0.1, discount_factor=0.97, epsilon=1.0, epsilon_decay=0.995, min_epsilon=0.01):
+    def __init__(self, env, learning_rate=0.1, discount_factor=0.97, epsilon=1.0, epsilon_decay=0.995, min_epsilon=0.01, temperature=1.0, temp_decay=0.995, min_temp=0.01):
         self.env = env
         self.lr = learning_rate
         self.gamma = discount_factor
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
         self.min_epsilon = min_epsilon
-        
+
+        # Boltzmann parameters
+        self.temperature = temperature
+        self.temp_decay = temp_decay
+        self.min_temp = min_temp
+
+        # For reward-based decay
+        self.window_size = 100  # Size of window for average reward calculation
+        self.fast_decay = epsilon_decay  # Decay rate when improving
+        self.slow_decay = epsilon_decay/10 + 0.9  # Decay rate when not improving
+        self.stuck_count = 0  # Counter for consecutive non-improvement
+        self.patience = 2000  # Number of windows to wait before increasing epsilon
         # Initialize Q-table as a defaultdict
         self.q_table = defaultdict(lambda: np.zeros(env.num_actions))
         
@@ -21,6 +32,29 @@ class QLearning:
         self.episode_rewards = []
         self.episode_lengths = []
         self.epsilon_history = []
+
+    def decay_epsilon_reward_based(self):
+        """Decay or increase epsilon based on reward improvement"""
+        if len(self.episode_rewards) >= self.window_size:
+            # Calculate current and previous averages
+            current_avg = np.mean(self.episode_rewards[-self.window_size:])
+            previous_avg = np.mean(self.episode_rewards[-2*self.window_size:-self.window_size])
+            
+            # Check if stuck (no significant improvement)
+            if current_avg > previous_avg:
+                # Rewards are improving
+                self.epsilon = max(self.min_epsilon, self.epsilon * self.fast_decay)
+                self.stuck_count = 0  # Reset stuck count
+            else:
+                # Rewards are stagnating or worsening
+                self.epsilon = max(self.min_epsilon, self.epsilon * self.slow_decay)
+                self.stuck_count += 1  # Increment stuck count
+
+                # If stuck for too long, increase epsilon to encourage exploration
+                if self.stuck_count >= self.patience:
+                    self.epsilon = min(1.0, self.epsilon + self.epsilon/100)  # Temporarily increase epsilon
+                    print(f"Stuck for {self.stuck_count} windows. Increasing epsilon to {self.epsilon:.3f}")
+                    self.stuck_count = 0  # Reset stuck count after increasing epsilon
 
 
     def save_qtable(self, filepath):
@@ -85,7 +119,7 @@ class QLearning:
         else:
             return np.argmax(self.q_table[state])
 
-    def train(self, max_episodes=100000, min_improvement=0.01, convergence_window=500, patience=10):
+    def train(self, max_episodes=100000, min_improvement=0.01, convergence_window=100, patience=10):
         """
         Train the agent with convergence criteria
         
@@ -102,6 +136,7 @@ class QLearning:
         consecutive_no_improvement = 0
         best_avg = float('-inf')
         best_episode = 0
+        # stuck_threshold = 5
         
         for episode in range(max_episodes):
             state = self.env.reset()
@@ -131,8 +166,23 @@ class QLearning:
             #     self.min_epsilon,
             #     self.epsilon - (self.epsilon - self.min_epsilon) / max_episodes
             # )
-            self.epsilon = self.epsilon * self.epsilon_decay  # Using exponential decay
-
+            # self.epsilon = self.epsilon * self.epsilon_decay  # Using exponential decay
+                        # Adaptive decay based on performance
+            # if episode > convergence_window:
+            #     current_avg = np.mean(self.episode_rewards[-convergence_window:])
+            #     if current_avg > best_avg:
+            #         best_avg = current_avg
+            #         best_episode = episode
+            #         # Decay normally when improving
+            #         self.epsilon *= self.epsilon_decay
+            #         self.temperature *= self.temp_decay
+            #     else:
+            #         # Increase exploration when stuck
+            #         stuck_episodes = episode - best_episode
+            #         if stuck_episodes > stuck_threshold * convergence_window:
+            #             self.epsilon = min(1.0, self.epsilon * 1.5)
+            #             self.temperature = min(1.0, self.temperature * 1.5)
+            self.decay_epsilon_reward_based()
             
             # Track progress
             self.episode_rewards.append(total_reward)
@@ -352,12 +402,12 @@ def main():
         env=env,
         learning_rate=0.1,
         epsilon=1.0,
-        epsilon_decay=0.99995,  # Slower decay
-        min_epsilon=0.05      # Higher minimum
+        epsilon_decay=0.9997,  # Slower decay
+        min_epsilon=0.1      # Higher minimum
     )
 
     agent.train(
-        max_episodes=100000,
+        max_episodes=30000,
         min_improvement=0.01,
         convergence_window=500,  # Larger window
         patience=10             # More patience
@@ -376,7 +426,7 @@ def main():
 
     env = DroneEnvironment(
         grid_size=10,
-        max_steps=50,
+        max_steps=100,
         render_mode="human",
         safe_return_threshold=0.3
     )
@@ -399,7 +449,7 @@ def run_trained_agent():
     """Function to run a trained agent without training"""
     env = DroneEnvironment(
         grid_size=10,
-        max_steps=50,
+        max_steps=100,
         render_mode="human",
         safe_return_threshold=0.3
     )

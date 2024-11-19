@@ -44,18 +44,19 @@ class DroneEnvironment:
         ])
 
         self.REWARDS = {
-            'step': -0.1,             # Small penalty to encourage efficiency
-            'new_cell': 2,            # Good reward for doing the main task
+            'step': -0.02,             # Small penalty to encourage efficiency
+            'new_cell': 0.1,            # Good reward for doing the main task
 
-            'boundary': -1,         # Moderate penalty for poor navigation
-            'revisit': -0.2,   # Slight penalty for revisiting cells
+            'boundary': 0,         # Moderate penalty for poor navigation
+            'revisit': 0,   # Slight penalty for revisiting cells
 
-            'return_towards': 0.02,    # Encourage safe return behavior
-            'return_away': -2,       # Stronger penalty for risky behavior
+            'return_towards': 0.0,    # Encourage safe return behavior
+            'return_away': 0,       # Stronger penalty for risky behavior
 
-            'completion': 20.0,         # Big reward for perfect mission
-            'safe_return': 5,        # Good reward for safe return
-            'battery_depleted': -20.0   # Catastrophic failure - should be strongly avoided
+            'completion': 3,         # Big reward for perfect mission
+            'safe_return': 0.5,           # Good reward for safe return
+            'battery_depleted': -1,  # Catastrophic failure - should be strongly avoided
+            'not_enough_seeds': -1   # Not enough seeds to complete the mission
         }
         
         self.reset()
@@ -177,10 +178,13 @@ class DroneEnvironment:
                 reward += self.REWARDS['completion']
             else:
                 reward += self.REWARDS['safe_return']
+                if self.steps < self.max_steps/3:
+                    reward += self.REWARDS['not_enough_seeds']
             terminated = True
 
         if self.render_mode == "human":
             self._render_frame()
+
         
         return self.get_state(), reward, terminated
 
@@ -259,10 +263,20 @@ class DroneEnvironment:
             threshold_x, battery_y + 15,
             fill='#E74C3C', width=2
         )
+
+            # ** Add text for steps remaining **
+        steps_remaining = self.max_steps - self.steps
+        self.canvas.create_text(
+            5, battery_y + 5,  # Position to the left of the battery bar
+            anchor='w',  # Left-align the text
+            text=f"Steps Left: {steps_remaining}",
+            fill='black',
+            font=('Helvetica', 12, 'bold')
+        )
         
         # Update the display
         self.root.update()
-        time.sleep(0.2)  # Add small delay for visualization
+        time.sleep(0.3)  # Add small delay for visualization
 
     def close(self):
         """Close the GUI"""
