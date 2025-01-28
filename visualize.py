@@ -3,7 +3,7 @@ import numpy as np
 from DroneEnvironment import DroneEnvironment
 
 GRID_SIZE = 10
-MAX_STEPS = 100
+MAX_STEPS = 60
 
 if __name__ == "__main__":
     # Load Q-table

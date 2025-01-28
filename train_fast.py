@@ -6,50 +6,50 @@ import pickle
 # Environment Setup (No GUI)
 # ------------------------------
 GRID_SIZE = 10
-MAX_STEPS = 100
+MAX_STEPS = 60
 
 # # Hardcoded grid from your code
 GRID = np.array([
-    [1, 0, 0, 1, 1, 0, 1, 0, 1, 0],
-    [0, 0, 0, 1, 1, 1, 1, 0, 1, 0],
-    [1, 1, 0, 0, 0, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 0, 1, 0, 1, 0, 0],
-    [1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 1, 1, 1, 0, 1],
-    [0, 0, 0, 0, 0, 1, 0, 0, 1, 0],
-    [1, 0, 0, 1, 1, 1, 0, 1, 1, 1],
     [0, 0, 0, 1, 1, 0, 1, 1, 1, 0],
-    [1, 1, 0, 0, 0, 0, 1, 1, 0, 0]
+    [0, 0, 0, 1, 1, 0, 1, 1, 1, 0],
+    [1, 1, 0, 0, 0, 0, 1, 1, 1, 0],
+    [1, 1, 1, 0, 0, 0, 0, 1, 0, 0],
+    [1, 1, 0, 0, 1, 0, 0, 0, 0, 0],
+    [0, 1, 0, 0, 0, 0, 1, 0, 0, 1],
+    [0, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+    [1, 0, 0, 1, 1, 0, 0, 1, 1, 0],
+    [0, 0, 0, 1, 1, 0, 1, 1, 1, 0],
+    [1, 0, 0, 0, 0, 0, 1, 0, 0, 0]
 ], dtype=np.int32)
-
-GRID = np.array([
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-], dtype=np.int32)
+# 
+# GRID = np.array([
+#     [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+# ], dtype=np.int32)
 
 # Rewards
 R_STEP = -0.001
 R_REVISIT_WALK = -0.0005
-R_NO_CELL = -0
-R_REVISIT = -0
-R_NEW_CELL = 0.02
-R_BOUNDARY = -0.000
-R_RETURN_TOWARDS = 0.0
-R_RETURN_AWAY = 0.0
-R_COMPLETION = 1
-R_SAFE_RETURN = 0.01
+R_NO_CELL = 0
+R_REVISIT = 0
+R_NEW_CELL = 0.1
+R_BOUNDARY = 0
+R_RETURN_TOWARDS = 0
+R_RETURN_AWAY = 0
+R_COMPLETION = 2
+R_SAFE_RETURN = 1
 R_BATTERY_DEPLETED = 0
 R_NOT_ENOUGH_SEEDS = 0.0
 R_SLOW_RETURN = 0
-R_FAST_RETURN = 0.001
+R_FAST_RETURN = 0
 
 # Actions: 0: up, 1: right, 2: down, 3: left
 ACTIONS = np.array([(-1,0),(0,1),(1,0),(0,-1)], dtype=np.int32)
@@ -63,8 +63,10 @@ SEEDABLE_COUNT = np.sum(GRID == 1)
 def get_epsilon(epsilon, decay_strategy, initial_epsilon, min_epsilon, decay_rate, decay_episode, effective_episodes):
     if decay_strategy == "exponential":
         epsilon=max(min_epsilon, initial_epsilon * (decay_rate ** decay_episode))
-        if epsilon < min_epsilon*3:
-            epsilon = 0
+        # if epsilon < 0.05 and epsilon > min_epsilon:
+        #     epsilon = 0.05
+        # elif epsilon < min_epsilon:
+        #     epsilon = 0
         return epsilon
     elif decay_strategy == "linear":
         linear_decay = (initial_epsilon - min_epsilon) / effective_episodes
@@ -109,13 +111,18 @@ def step(r, c, visited, steps_used, seeded_count, action, grid, max_steps):
         if seeded_count == SEEDABLE_COUNT:
             reward += R_COMPLETION
             reward += R_FAST_RETURN * (max_steps - steps_used)
-            found = True
         else:
             reward += R_SAFE_RETURN
         done = True
-    if done:
-        reward += R_SLOW_RETURN * steps_used
-    
+    # if done:
+    #     if nr == START_POS[0] and nc == START_POS[1]:
+    #         if seeded_count == SEEDABLE_COUNT:
+    #             reward += R_COMPLETION
+    #             reward += R_FAST_RETURN * (max_steps - steps_used)
+    #         else:
+    #             reward += R_SAFE_RETURN
+    #     else:
+    #         reward += R_BATTERY_DEPLETED
     return nr, nc, visited, steps_used,seeded_count, reward, done
 
 # State encoding/decoding
@@ -146,9 +153,7 @@ def run_episode(Q, alpha, gamma, epsilon, grid, max_steps):
             action = np.argmax(Q[r, c, steps_remaining])
         
         nr, nc, visited, steps_used, seeded_count, reward, done = step(r, c, visited, steps_used,seeded_count, action, grid, max_steps)
-        # if found :
-            # epsilon = 0.00001
-        # Q-update
+
         next_steps_remaining = max_steps - steps_used
         if not done:
             td_target = reward + gamma * np.max(Q[nr, nc, next_steps_remaining])
@@ -330,7 +335,8 @@ def run_episode_extended_sarsa(Q, alpha, gamma, epsilon, grid, max_steps, n):
 @numba.njit
 def train_agent(n_episodes, alpha, gamma, initial_epsilon, min_epsilon, warmup_episodes, decay_rate, decay_strategy, grid, max_steps, convergence_window, min_improvement, patience, n_step=5):
     # Q = (np.random.rand(GRID_SIZE, GRID_SIZE, max_steps+1, 4) * 100).astype(np.float32)
-    Q = (np.ones((GRID_SIZE, GRID_SIZE, max_steps+1, 4)) * 1000).astype(np.float32)
+    # Q = (np.ones((GRID_SIZE, GRID_SIZE, max_steps+1, 4)) * 1000).astype(np.float32)
+    Q = np.full((GRID_SIZE, GRID_SIZE, max_steps+1, 4), 1e-5, dtype=np.float32)
     # Q= np.zeros((GRID_SIZE, GRID_SIZE, max_steps+1, 4), dtype=np.float32)
     Q2= np.zeros((GRID_SIZE, GRID_SIZE, max_steps+1, 4), dtype=np.float32)
     episode_rewards = np.zeros(n_episodes, dtype=np.float32)
@@ -342,6 +348,7 @@ def train_agent(n_episodes, alpha, gamma, initial_epsilon, min_epsilon, warmup_e
     best_avg = -999999.0
     last_avg = -999999.0
     no_improvement_count = 0
+    max_reward = -999999.0
 
     for ep in range(n_episodes):
         # Compute epsilon based on whether we are before or after reset_base
@@ -357,6 +364,8 @@ def train_agent(n_episodes, alpha, gamma, initial_epsilon, min_epsilon, warmup_e
         episode_epsilon[ep] = epsilon
         # Run an episode
         ep_reward,epsilon = run_episode(Q, alpha, gamma, epsilon, grid, max_steps)
+        if ep_reward > max_reward:
+            max_reward = ep_reward
         # ep_reward = run_episode_extended_sarsa(Q, alpha, gamma, epsilon, grid, max_steps, n_step)
         # ep_reward = run_episode_double_q_learning(Q, Q2, alpha, gamma, epsilon, grid, max_steps)
         episode_rewards[ep] = ep_reward
@@ -380,7 +389,7 @@ def train_agent(n_episodes, alpha, gamma, initial_epsilon, min_epsilon, warmup_e
             # Update best average if improved
             if current_avg > best_avg:
                 best_avg = current_avg
-                print("Episode", ep+1, "avg reward:", float(current_avg), "improvement:", float(improvement), "epsilon:", epsilon)
+                print("Episode", ep+1, "avg reward:", float(current_avg), "improvement:", float(improvement), "epsilon:", epsilon, "max reward:", max_reward)
                 
 
             # Check improvement thresholds
@@ -411,11 +420,11 @@ def train_agent(n_episodes, alpha, gamma, initial_epsilon, min_epsilon, warmup_e
 
 def main():
     n_episodes = 1000000
-    alpha = 0.10
+    alpha = 0.1
     gamma = 0.95
-    initial_epsilon = 0.3
-    min_epsilon = 0.00001
-    warmup_episodes = n_episodes / 3
+    initial_epsilon = 1
+    min_epsilon = 0.001
+    warmup_episodes = n_episodes / 4
     effective_episodes = max(1, n_episodes - warmup_episodes)
     decay_rate = np.exp(np.log(min_epsilon / initial_epsilon) / (effective_episodes/1))
     decay_strategy = "exponential"
@@ -424,7 +433,7 @@ def main():
     # Hyperparameters for improvement checking
     convergence_window = 1000
     min_improvement = 0.01
-    patience = 50000
+    patience = 1000
     
     Q, rewards, epsilons = train_agent(n_episodes, alpha, gamma, initial_epsilon, min_epsilon, warmup_episodes, decay_rate, decay_strategy, GRID, MAX_STEPS, convergence_window, min_improvement, patience,steps)
     # Plotting the rewards

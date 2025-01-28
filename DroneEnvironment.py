@@ -11,49 +11,50 @@ SAFE_RETURN_THRESHOLD = 0.3
 # Action definitions
 ACTIONS = np.array([(-1,0),(0,1),(1,0),(0,-1)], dtype=np.int32)
 
-# Rewards (exactly as in training)
+# Rewards
 R_STEP = -0.001
-R_REVISIT_WALK = 0
-R_NO_CELL = -0.001
-R_REVISIT = -0.001
-R_NEW_CELL = 0
-R_BOUNDARY = -0.005
+R_REVISIT_WALK = -0.0005
+R_NO_CELL = 0
+R_REVISIT = 0
+R_NEW_CELL = 0.1
+R_BOUNDARY = 0
 R_RETURN_TOWARDS = 0
 R_RETURN_AWAY = 0
-R_COMPLETION = 0
-R_SAFE_RETURN = -0.05
-R_BATTERY_DEPLETED = -1
-R_NOT_ENOUGH_SEEDS = 0
+R_COMPLETION = 2
+R_SAFE_RETURN = 1
+R_BATTERY_DEPLETED = 0
+R_NOT_ENOUGH_SEEDS = 0.0
 R_SLOW_RETURN = 0
 R_FAST_RETURN = 0
 
 
+
 # # Hardcoded grid from your training code
 GRID = np.array([
-    [1, 0, 0, 1, 1, 0, 1, 0, 1, 0],
-    [0, 0, 0, 1, 1, 1, 1, 0, 1, 0],
-    [1, 1, 0, 0, 0, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 0, 1, 0, 1, 0, 0],
-    [1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 1, 1, 1, 0, 1],
-    [0, 0, 0, 0, 0, 1, 0, 0, 1, 0],
-    [1, 0, 0, 1, 1, 1, 0, 1, 1, 1],
     [0, 0, 0, 1, 1, 0, 1, 1, 1, 0],
-    [1, 1, 0, 0, 0, 0, 1, 1, 0, 0]
+    [0, 0, 0, 1, 1, 0, 1, 1, 1, 0],
+    [1, 1, 0, 0, 0, 0, 1, 1, 1, 0],
+    [1, 1, 1, 0, 0, 0, 0, 1, 0, 0],
+    [1, 1, 0, 0, 1, 0, 0, 0, 0, 0],
+    [0, 1, 0, 0, 0, 1, 1, 0, 0, 1],
+    [0, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+    [1, 0, 0, 1, 1, 0, 0, 1, 1, 0],
+    [0, 0, 0, 1, 1, 0, 1, 1, 1, 0],
+    [1, 0, 0, 0, 0, 0, 1, 0, 0, 0]
 ], dtype=np.int32)
 
-GRID = np.array([
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-], dtype=np.int32)
+# GRID = np.array([
+#     [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+# ], dtype=np.int32)
 
 SEEDABLE_COUNT = np.sum(GRID == 1)
 START_POS = (0,0)
@@ -74,6 +75,7 @@ class DroneEnvironment:
         self.render_mode = render_mode
         self.safe_return_threshold = safe_return_threshold
         self.grid = grid
+        self.i=0
 
         # In training code, start is always (0,0)
         self.start_pos = np.array([0,0], dtype=np.int32)
@@ -205,6 +207,10 @@ class DroneEnvironment:
         if not hasattr(self, 'canvas'):
             return
 
+        if self.i==0:
+            # wait keypress
+            # input("Press Enter to continue...")
+            self.i+=1
         self.canvas.delete("all")
 
         # Draw grid
@@ -282,7 +288,7 @@ class DroneEnvironment:
         )
 
         self.root.update()
-        time.sleep(0.05)  # small delay for visualization
+        time.sleep(0.1)  # small delay for visualization
 
 if __name__ == "__main__":
     # Example on how to load Q-table and visualize a single episode
