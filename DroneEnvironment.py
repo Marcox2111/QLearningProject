@@ -5,27 +5,22 @@ import time
 from tkinter import ttk
 
 GRID_SIZE = 10
-MAX_STEPS = 100
+MAX_STEPS = 60
 SAFE_RETURN_THRESHOLD = 0.3
 
 # Action definitions
 ACTIONS = np.array([(-1,0),(0,1),(1,0),(0,-1)], dtype=np.int32)
 
 # Rewards
-R_STEP = -0.001
-R_REVISIT_WALK = -0.0005
-R_NO_CELL = 0
-R_REVISIT = 0
-R_NEW_CELL = 0.1
-R_BOUNDARY = 0
-R_RETURN_TOWARDS = 0
-R_RETURN_AWAY = 0
-R_COMPLETION = 2
-R_SAFE_RETURN = 1
-R_BATTERY_DEPLETED = 0
-R_NOT_ENOUGH_SEEDS = 0.0
-R_SLOW_RETURN = 0
-R_FAST_RETURN = 0
+R_STEP = -0.02
+R_REVISIT_WALK = 0
+R_NO_CELL = -0.02
+R_REVISIT = -0.02
+R_NEW_CELL = 0
+R_BOUNDARY = -0.05
+R_COMPLETION = 0
+R_SAFE_RETURN = 0
+R_BATTERY_DEPLETED = -0.3
 
 
 
@@ -129,7 +124,6 @@ class DroneEnvironment:
         return (tuple(self.current_pos), self.max_steps - self.steps_used)
 
     def step(self, action):
-        self.steps_used += 1
         r, c = self.current_pos
         nr = r + ACTIONS[action][0]
         nc = c + ACTIONS[action][1]
@@ -143,33 +137,39 @@ class DroneEnvironment:
             reward += R_BOUNDARY
 
         if self.grid[nr, nc] == 1:
-            if self.visited[nr, nc] == 1:
-                reward += R_REVISIT
-            else:
+            if self.visited[nr, nc] == 0:
                 reward += R_NEW_CELL
+            else:
+                reward += R_REVISIT
         else:
-            # grid cell == 0
             reward += R_NO_CELL
 
         self.visited[nr, nc] = 1
+        
         self.current_pos = np.array([nr, nc], dtype=np.int32)
 
-        # Check return home condition
-        ret_home = should_return_home(nr, nc, self.steps_used, self.max_steps, self.safe_return_threshold)
-        if ret_home:
-            dist_before = manhattan_distance(r, c, START_POS[0], START_POS[1])
-            dist_after = manhattan_distance(nr, nc, START_POS[0], START_POS[1])
-            if dist_after < dist_before:
-                reward += R_RETURN_TOWARDS
-            else:
-                reward += R_RETURN_AWAY
 
         # Termination conditions
-        if self.steps_used >= self.max_steps:
+        self.steps_used += 1
+        if self.steps_used > self.max_steps:
             reward += R_BATTERY_DEPLETED
             done = True
-        elif nr == START_POS[0] and nc == START_POS[1]:
-            # Check completion
+            
+        # if done:
+            # if nr == START_POS[0] and nc == START_POS[1]:
+            #     seeded_count = 0
+            #     for i in range(self.grid_size):
+            #         for j in range(self.grid_size):
+            #             if self.grid[i, j] == 1 and self.visited[i, j] == 1:
+            #                 seeded_count += 1
+            #     if seeded_count == SEEDABLE_COUNT:
+            #         reward += R_COMPLETION
+            #     else:
+            #         reward += R_SAFE_RETURN
+            # else:
+            #     reward += R_BATTERY_DEPLETED
+            
+        if nr == START_POS[0] and nc == START_POS[1]:
             seeded_count = 0
             for i in range(self.grid_size):
                 for j in range(self.grid_size):
@@ -179,11 +179,8 @@ class DroneEnvironment:
                 reward += R_COMPLETION
             else:
                 reward += R_SAFE_RETURN
-                # In training code: if steps_used < max_steps/3, reward += R_NOT_ENOUGH_SEEDS
-                # This is always 0, but let's keep it:
-                if self.steps_used < self.max_steps/3:
-                    reward += R_NOT_ENOUGH_SEEDS
             done = True
+            
 
         if self.render_mode == "human":
             self._render_frame()
@@ -202,15 +199,21 @@ class DroneEnvironment:
             self.max_steps,
             self.safe_return_threshold
         )
-
+        
+    def _resume_rendering(self, event=None):
+        """ Callback to resume rendering when a key is pressed. """
+        self.waiting_for_key.set(True)
+        self.root.unbind("<space>")  # Unbind after first key press
+    
     def _render_frame(self):
         if not hasattr(self, 'canvas'):
             return
 
-        if self.i==0:
-            # wait keypress
-            # input("Press Enter to continue...")
-            self.i+=1
+        if self.i == 0:
+            self.waiting_for_key = tk.BooleanVar(value=False)
+            self.root.bind("<space>", self._resume_rendering)  # Bind key event
+            self.root.wait_variable(self.waiting_for_key)  # Wait until key is pressed
+        self.i += 1
         self.canvas.delete("all")
 
         # Draw grid

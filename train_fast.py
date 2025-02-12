@@ -36,20 +36,21 @@ GRID = np.array([
 # ], dtype=np.int32)
 
 # Rewards
-R_STEP = -0.001
-R_REVISIT_WALK = -0.0005
-R_NO_CELL = 0
-R_REVISIT = 0
-R_NEW_CELL = 0.1
-R_BOUNDARY = 0
+R_STEP = -0.02
+R_REVISIT_WALK = 0
+R_NO_CELL = -0.03
+R_REVISIT = -0.02
+R_NEW_CELL = 0
+R_BOUNDARY = -0.02
 R_RETURN_TOWARDS = 0
 R_RETURN_AWAY = 0
-R_COMPLETION = 2
-R_SAFE_RETURN = 1
-R_BATTERY_DEPLETED = 0
+R_COMPLETION = 0
+R_SAFE_RETURN = 0
+R_BATTERY_DEPLETED = -0.3
 R_NOT_ENOUGH_SEEDS = 0.0
 R_SLOW_RETURN = 0
 R_FAST_RETURN = 0
+R_LAZY_RETURN = -0
 
 # Actions: 0: up, 1: right, 2: down, 3: left
 ACTIONS = np.array([(-1,0),(0,1),(1,0),(0,-1)], dtype=np.int32)
@@ -63,10 +64,10 @@ SEEDABLE_COUNT = np.sum(GRID == 1)
 def get_epsilon(epsilon, decay_strategy, initial_epsilon, min_epsilon, decay_rate, decay_episode, effective_episodes):
     if decay_strategy == "exponential":
         epsilon=max(min_epsilon, initial_epsilon * (decay_rate ** decay_episode))
-        # if epsilon < 0.05 and epsilon > min_epsilon:
-        #     epsilon = 0.05
-        # elif epsilon < min_epsilon:
-        #     epsilon = 0
+        # if epsilon < 0.01 and epsilon > min_epsilon*1:
+        #     epsilon = 0.01
+        if epsilon < min_epsilon*1.2:
+            epsilon = 0
         return epsilon
     elif decay_strategy == "linear":
         linear_decay = (initial_epsilon - min_epsilon) / effective_episodes
@@ -88,8 +89,6 @@ def step(r, c, visited, steps_used, seeded_count, action, grid, max_steps):
         nc = c
         reward += R_BOUNDARY
     
-    if visited[nr, nc] == 1:
-        reward += R_REVISIT_WALK
 
     if grid[nr, nc] == 1:
         if visited[nr, nc] == 1:
@@ -105,24 +104,16 @@ def step(r, c, visited, steps_used, seeded_count, action, grid, max_steps):
     # Termination conditions
     steps_used += 1
     if steps_used >= max_steps:
-        reward += R_BATTERY_DEPLETED
         done = True
-    elif nr == START_POS[0] and nc == START_POS[1]:
-        if seeded_count == SEEDABLE_COUNT:
-            reward += R_COMPLETION
-            reward += R_FAST_RETURN * (max_steps - steps_used)
+
+    if done:
+        if nr == START_POS[0] and nc == START_POS[1]:
+            if seeded_count == SEEDABLE_COUNT:
+                reward += R_COMPLETION
+            else:
+                reward += R_SAFE_RETURN
         else:
-            reward += R_SAFE_RETURN
-        done = True
-    # if done:
-    #     if nr == START_POS[0] and nc == START_POS[1]:
-    #         if seeded_count == SEEDABLE_COUNT:
-    #             reward += R_COMPLETION
-    #             reward += R_FAST_RETURN * (max_steps - steps_used)
-    #         else:
-    #             reward += R_SAFE_RETURN
-    #     else:
-    #         reward += R_BATTERY_DEPLETED
+            reward += R_BATTERY_DEPLETED
     return nr, nc, visited, steps_used,seeded_count, reward, done
 
 # State encoding/decoding
@@ -333,10 +324,10 @@ def run_episode_extended_sarsa(Q, alpha, gamma, epsilon, grid, max_steps, n):
 
 
 @numba.njit
-def train_agent(n_episodes, alpha, gamma, initial_epsilon, min_epsilon, warmup_episodes, decay_rate, decay_strategy, grid, max_steps, convergence_window, min_improvement, patience, n_step=5):
+def train_agent(n_episodes, alpha, gamma, initial_epsilon, min_epsilon, warmup_episodes, decay_rate, decay_strategy, grid, max_steps, convergence_window, min_improvement, patience, n_step=1000):
     # Q = (np.random.rand(GRID_SIZE, GRID_SIZE, max_steps+1, 4) * 100).astype(np.float32)
-    # Q = (np.ones((GRID_SIZE, GRID_SIZE, max_steps+1, 4)) * 1000).astype(np.float32)
-    Q = np.full((GRID_SIZE, GRID_SIZE, max_steps+1, 4), 1e-5, dtype=np.float32)
+    Q = (np.ones((GRID_SIZE, GRID_SIZE, max_steps+1, 4)) * -100).astype(np.float32)
+    # Q = np.full((GRID_SIZE, GRID_SIZE, max_steps+1, 4), 1e-5, dtype=np.float32)
     # Q= np.zeros((GRID_SIZE, GRID_SIZE, max_steps+1, 4), dtype=np.float32)
     Q2= np.zeros((GRID_SIZE, GRID_SIZE, max_steps+1, 4), dtype=np.float32)
     episode_rewards = np.zeros(n_episodes, dtype=np.float32)
@@ -364,10 +355,10 @@ def train_agent(n_episodes, alpha, gamma, initial_epsilon, min_epsilon, warmup_e
         episode_epsilon[ep] = epsilon
         # Run an episode
         ep_reward,epsilon = run_episode(Q, alpha, gamma, epsilon, grid, max_steps)
-        if ep_reward > max_reward:
-            max_reward = ep_reward
         # ep_reward = run_episode_extended_sarsa(Q, alpha, gamma, epsilon, grid, max_steps, n_step)
         # ep_reward = run_episode_double_q_learning(Q, Q2, alpha, gamma, epsilon, grid, max_steps)
+        if ep_reward > max_reward:
+            max_reward = ep_reward
         episode_rewards[ep] = ep_reward
         good_episode=0
         good_reward=0
@@ -419,16 +410,16 @@ def train_agent(n_episodes, alpha, gamma, initial_epsilon, min_epsilon, warmup_e
 
 
 def main():
-    n_episodes = 1000000
+    n_episodes = 10000000
     alpha = 0.1
     gamma = 0.95
     initial_epsilon = 1
     min_epsilon = 0.001
-    warmup_episodes = n_episodes / 4
+    warmup_episodes = n_episodes / 5
     effective_episodes = max(1, n_episodes - warmup_episodes)
     decay_rate = np.exp(np.log(min_epsilon / initial_epsilon) / (effective_episodes/1))
     decay_strategy = "exponential"
-    steps = 5
+    steps = 10000
     
     # Hyperparameters for improvement checking
     convergence_window = 1000
